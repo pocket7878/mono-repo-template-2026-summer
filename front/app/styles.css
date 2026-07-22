@@ -1,0 +1,27 @@
+:root {
+  color: #18212f;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 48rem;
+  padding: 2rem;
+}
+
+form,
+li {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+ul {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+}

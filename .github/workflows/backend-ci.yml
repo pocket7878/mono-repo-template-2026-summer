@@ -1,0 +1,42 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths: ["backend/**", "shared/backend_api/**", ".github/workflows/backend-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17.5
+        env:
+          POSTGRES_DB: reference_todo
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["15432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d reference_todo"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+      - run: gofmt -s -l . | (! grep .)
+      - run: go vet ./...
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.11.3
+          working-directory: backend
+      - run: go tool go-arch-lint check
+      - run: go run ./cmd/backend-lint ./...
+      - run: POSTGRES_TEST_DSN=postgres://postgres:postgres@127.0.0.1:15432/reference_todo?sslmode=disable ./scripts/run_coverage_gate.sh

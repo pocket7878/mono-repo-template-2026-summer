@@ -1,0 +1,27 @@
+name: E2E CI
+
+on:
+  pull_request:
+    paths: ["backend/**", "front/**", "shared/backend_api/**", ".github/workflows/e2e-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+      - run: npm ci
+        working-directory: front
+      - run: npx playwright install --with-deps chromium
+        working-directory: front
+      - run: bash ./scripts/run-e2e-local.sh

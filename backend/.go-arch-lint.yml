@@ -1,0 +1,50 @@
+version: 3
+workdir: internal
+
+components:
+  entity:
+    in: entity
+  usecase:
+    in: usecase/**
+  repository:
+    in: repository
+  repository_internal:
+    in: repository/internal/**
+  handler:
+    in: handler
+  handler_api:
+    in: handler/api/**
+  infra:
+    in: infra/**
+
+excludeFiles:
+  - ".*_test\\.go$"
+
+deps:
+  entity:
+    anyProjectDeps: false
+    anyVendorDeps: true
+  usecase:
+    anyProjectDeps: false
+    anyVendorDeps: true
+  repository:
+    mayDependOn:
+      - usecase
+      - repository_internal
+    anyVendorDeps: true
+  repository_internal:
+    anyProjectDeps: false
+    anyVendorDeps: true
+  handler:
+    mayDependOn:
+      - usecase
+      - handler_api
+    anyVendorDeps: true
+  handler_api:
+    anyVendorDeps: true
+  infra:
+    mayDependOn:
+      - handler
+      - repository
+      - usecase
+    anyVendorDeps: true
