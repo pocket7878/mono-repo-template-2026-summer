@@ -16,6 +16,8 @@ components:
     in: handler/api/**
   infra:
     in: infra/**
+  lint:
+    in: lint/**
 
 excludeFiles:
   - ".*_test\\.go$"
@@ -25,10 +27,12 @@ deps:
     anyProjectDeps: false
     anyVendorDeps: true
   usecase:
-    anyProjectDeps: false
+    mayDependOn:
+      - entity
     anyVendorDeps: true
   repository:
     mayDependOn:
+      - entity
       - usecase
       - repository_internal
     anyVendorDeps: true
@@ -37,14 +41,22 @@ deps:
     anyVendorDeps: true
   handler:
     mayDependOn:
+      - entity
       - usecase
       - handler_api
     anyVendorDeps: true
   handler_api:
+    mayDependOn:
+      - handler
     anyVendorDeps: true
   infra:
     mayDependOn:
       - handler
+      - handler_api
       - repository
       - usecase
+    anyVendorDeps: true
+  lint:
+    mayDependOn:
+      - lint
     anyVendorDeps: true

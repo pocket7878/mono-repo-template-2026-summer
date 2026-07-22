@@ -12,3 +12,19 @@ services:
       interval: 2s
       timeout: 2s
       retries: 30
+
+  localstack:
+    image: localstack/localstack:4.14.0
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: ap-northeast-1
+      SQS_ENDPOINT_STRATEGY: path
+    ports:
+      - "${LOCALSTACK_PORT:-14566}:4566"
+    volumes:
+      - ./scripts/localstack:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "awslocal sqs get-queue-url --queue-name reference-todo-outbox >/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

@@ -26,6 +26,7 @@ model UpdateTodoRequest {
   title?: string;
   completed?: boolean;
   dueDate?: utcDateTime;
+  @minValue(1)
   version: int32;
 }
 
@@ -79,5 +80,5 @@ interface Todos {
   @delete
   @route("/{todoId}")
   @operationId("TodosDelete")
-  delete(@path todoId: string): void | NotFoundProblem | InternalServerErrorProblem;
+  delete(@path todoId: string): void | BadRequestProblem | NotFoundProblem | InternalServerErrorProblem;
 }

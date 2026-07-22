@@ -1,6 +1,17 @@
 import type { components } from "../../lib/backend-api/openapi/types";
 
 export type Todo = components["schemas"]["Todo"];
+export type Problem = components["schemas"]["Problem"];
+
+export class APIProblemError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly problem: Problem,
+  ) {
+    super(problem.detail ?? problem.title);
+    this.name = "APIProblemError";
+  }
+}
 
 export type TodoAPI = {
   listTodos: () => Promise<Todo[]>;
@@ -17,6 +28,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!response.ok) {
+    const contentType = response.headers.get("Content-Type")?.toLowerCase() ?? "";
+    if (contentType.includes("application/problem+json")) {
+      const problem = (await response.json()) as Problem;
+      throw new APIProblemError(response.status, problem);
+    }
     throw new Error(`API request failed with ${response.status}`);
   }
   if (response.status === 204) {

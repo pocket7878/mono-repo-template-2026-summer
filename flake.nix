@@ -22,6 +22,7 @@
               go
               nodejs_20
               terraform
+              tflint
               gnumake
               git
               curl
@@ -29,6 +30,7 @@
               postgresql_17
               golangci-lint
               sqlc
+              go-migrate
             ];
 
             shellHook = ''

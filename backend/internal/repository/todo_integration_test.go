@@ -27,7 +27,7 @@ func TestTodoRepositoryPersistsAndVersionChecks(t *testing.T) {
 	t.Cleanup(pool.Close)
 
 	_, err = pool.Exec(ctx, `
-DROP TABLE IF EXISTS todos;
+DROP TABLE IF EXISTS job_dead_letters, job_outbox_events, todos CASCADE;
 CREATE TABLE todos (
   id UUID PRIMARY KEY,
   title TEXT NOT NULL CHECK (btrim(title) <> ''),
@@ -36,6 +36,18 @@ CREATE TABLE todos (
   due_date TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE TABLE job_outbox_events (
+  id UUID PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'pending',
+  last_error TEXT,
+  lease_expires_at TIMESTAMPTZ,
+  published_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );`)
 	require.NoError(t, err)
 
@@ -44,6 +56,7 @@ CREATE TABLE todos (
 	item, err := entity.NewTodo(uuid.New(), "Buy milk", false, 1, nil, now, now)
 	require.NoError(t, err)
 	require.NoError(t, repository.Create(ctx, item))
+	assertOutboxEvent(t, ctx, pool, "todo.created", item.ID)
 
 	listed, err := repository.List(ctx)
 	require.NoError(t, err)
@@ -57,12 +70,27 @@ CREATE TABLE todos (
 	updated, err := entity.NewTodo(item.ID, "Buy oat milk", true, 2, nil, now, now.Add(time.Minute))
 	require.NoError(t, err)
 	require.NoError(t, repository.Update(ctx, updated, 1))
+	assertOutboxEvent(t, ctx, pool, "todo.updated", item.ID)
 	require.ErrorIs(t, repository.Update(ctx, updated, 1), todo.ErrVersionConflict)
 	require.NoError(t, repository.Delete(ctx, item.ID))
+	assertOutboxEvent(t, ctx, pool, "todo.deleted", item.ID)
 	require.ErrorIs(t, repository.Delete(ctx, item.ID), todo.ErrNotFound)
 
 	_, err = repository.FindByID(ctx, item.ID)
 	require.ErrorIs(t, err, todo.ErrNotFound)
+}
+
+func assertOutboxEvent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, eventType string, todoID uuid.UUID) {
+	t.Helper()
+	var payloadID uuid.UUID
+	err := pool.QueryRow(ctx, `
+SELECT payload->>'id'
+FROM job_outbox_events
+WHERE event_type = $1
+ORDER BY created_at DESC
+LIMIT 1`, eventType).Scan(&payloadID)
+	require.NoError(t, err)
+	require.Equal(t, todoID, payloadID)
 }
 
 func TestTodoRepositoryReturnsNotFoundForMissingID(t *testing.T) {

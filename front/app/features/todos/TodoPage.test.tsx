@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { TodoPage } from "./TodoPage";
+import { APIProblemError } from "./api";
 
 describe("TodoPage", () => {
   it("creates and displays a todo", async () => {
@@ -61,7 +62,13 @@ describe("TodoPage", () => {
         api={{
           listTodos: vi.fn().mockResolvedValue([todo]),
           createTodo: vi.fn(),
-          updateTodo: vi.fn().mockRejectedValue(new Error("conflict")),
+          updateTodo: vi.fn().mockRejectedValue(
+            new APIProblemError(409, {
+              type: "https://reference-todo.dev/problems/version-conflict",
+              title: "Todo was modified",
+              status: 409,
+            }),
+          ),
           deleteTodo: vi.fn(),
         }}
       />,
@@ -70,6 +77,33 @@ describe("TodoPage", () => {
     await user.click(await screen.findByRole("checkbox", { name: "Buy milk" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent("This todo changed elsewhere.");
+  });
+
+  it("does not describe an unexpected update failure as a conflict", async () => {
+    const user = userEvent.setup();
+    const todo = {
+      id: "todo-1",
+      title: "Buy milk",
+      completed: false,
+      version: 1,
+      createdAt: "2026-07-22T12:00:00Z",
+      updatedAt: "2026-07-22T12:00:00Z",
+    };
+
+    render(
+      <TodoPage
+        api={{
+          listTodos: vi.fn().mockResolvedValue([todo]),
+          createTodo: vi.fn(),
+          updateTodo: vi.fn().mockRejectedValue(new Error("network failure")),
+          deleteTodo: vi.fn(),
+        }}
+      />,
+    );
+
+    await user.click(await screen.findByRole("checkbox", { name: "Buy milk" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not update todo.");
   });
 
   it("deletes a todo", async () => {

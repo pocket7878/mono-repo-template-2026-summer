@@ -1,3 +1,4 @@
 dist/
 coverage/
+test-results/
 app/lib/backend-api/openapi/

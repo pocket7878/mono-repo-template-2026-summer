@@ -115,6 +115,12 @@ paths:
       responses:
         '204':
           description: 'There is no content to send for this request, but the headers may be useful. '
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/BadRequestProblem'
         '404':
           description: The server cannot find the requested resource.
           content:
@@ -216,3 +222,4 @@ components:
         version:
           type: integer
           format: int32
+          minimum: 1

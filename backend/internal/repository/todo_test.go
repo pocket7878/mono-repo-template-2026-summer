@@ -1,48 +1,16 @@
 package repository
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/pocket7878/mono-repo-template-2026-summer/backend/internal/repository/internal/db"
 	"github.com/stretchr/testify/require"
 )
 
-type stubRow struct {
-	values []any
-	err    error
-}
-
-func (row stubRow) Scan(destinations ...any) error {
-	if row.err != nil {
-		return row.err
-	}
-	if len(destinations) != len(row.values) {
-		return errors.New("unexpected number of scan destinations")
-	}
-	for index, destination := range destinations {
-		switch pointer := destination.(type) {
-		case *uuid.UUID:
-			*pointer = row.values[index].(uuid.UUID)
-		case *string:
-			*pointer = row.values[index].(string)
-		case *bool:
-			*pointer = row.values[index].(bool)
-		case *int32:
-			*pointer = row.values[index].(int32)
-		case **time.Time:
-			*pointer = row.values[index].(*time.Time)
-		case *time.Time:
-			*pointer = row.values[index].(time.Time)
-		default:
-			return errors.New("unexpected scan destination")
-		}
-	}
-	return nil
-}
-
-func TestScanTodoReconstructsDomainEntity(t *testing.T) {
+func TestReconstructTodoReconstructsDomainEntity(t *testing.T) {
 	t.Parallel()
 
 	id := uuid.New()
@@ -50,11 +18,12 @@ func TestScanTodoReconstructsDomainEntity(t *testing.T) {
 	createdAt := time.Date(2026, time.July, 22, 10, 0, 0, 0, time.UTC)
 	updatedAt := createdAt.Add(time.Hour)
 
-	todo, err := scanTodo(stubRow{values: []any{
-		id, "Buy milk", false, int32(3), &dueDate, createdAt, updatedAt,
-	}})
+	todo := reconstructTodo(db.Todo{
+		ID: pgtype.UUID{Bytes: id, Valid: true}, Title: "Buy milk", Completed: false,
+		Version: 3, DueDate: pgtype.Timestamptz{Time: dueDate, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Time: createdAt, Valid: true}, UpdatedAt: pgtype.Timestamptz{Time: updatedAt, Valid: true},
+	})
 
-	require.NoError(t, err)
 	require.Equal(t, id, todo.ID)
 	require.Equal(t, "Buy milk", todo.Title.String())
 	require.Equal(t, int32(3), todo.Version)

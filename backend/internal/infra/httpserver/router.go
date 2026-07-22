@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pocket7878/mono-repo-template-2026-summer/backend/internal/handler"
@@ -9,10 +10,14 @@ import (
 )
 
 func NewRouter(todoHandler *handler.TodoHandler) *gin.Engine {
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "http://127.0.0.1:5173"
+	}
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 	router.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "http://127.0.0.1:5173")
+		c.Header("Access-Control-Allow-Origin", frontendOrigin)
 		c.Header("Access-Control-Allow-Headers", "Content-Type")
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS")
 		if c.Request.Method == http.MethodOptions {

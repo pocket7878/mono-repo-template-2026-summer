@@ -48,7 +48,6 @@ func (handler *TodoHandler) TodosCreate(c *gin.Context) {
 		handler.writeProblem(c, http.StatusBadRequest, "invalid-request", "Invalid request", nil)
 		return
 	}
-
 	created, err := handler.useCase.Create(c.Request.Context(), todo.CreateInput{Title: body.Title, DueDate: body.DueDate})
 	if err != nil {
 		if errors.Is(err, entity.ErrEmptyTodoTitle) {
@@ -72,6 +71,10 @@ func (handler *TodoHandler) TodosUpdate(c *gin.Context, todoID string) {
 	var body api.UpdateTodoRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		handler.writeProblem(c, http.StatusBadRequest, "invalid-request", "Invalid request", nil)
+		return
+	}
+	if body.Version < 1 {
+		handler.writeProblem(c, http.StatusBadRequest, "invalid-version", "Version must be a positive integer", nil)
 		return
 	}
 

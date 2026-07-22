@@ -2,13 +2,17 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pocket7878/mono-repo-template-2026-summer/backend/internal/entity"
+	db "github.com/pocket7878/mono-repo-template-2026-summer/backend/internal/repository/internal/db"
 	"github.com/pocket7878/mono-repo-template-2026-summer/backend/internal/usecase/todo"
 )
 
@@ -21,104 +25,116 @@ func NewTodoRepository(pool *pgxpool.Pool) *TodoRepository {
 }
 
 func (repository *TodoRepository) Create(ctx context.Context, item *entity.Todo) error {
-	_, err := repository.pool.Exec(ctx, `
-INSERT INTO todos (id, title, completed, version, due_date, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		item.ID,
-		item.Title.String(),
-		item.Completed,
-		item.Version,
-		item.DueDate,
-		item.CreatedAt,
-		item.UpdatedAt,
-	)
-	return err
+	return repository.withTransaction(ctx, func(tx pgx.Tx) error {
+		queries := db.New(tx)
+		if err := queries.CreateTodo(ctx, db.CreateTodoParams{
+			ID: pgUUID(item.ID), Title: item.Title.String(), Completed: item.Completed,
+			Version: item.Version, DueDate: pgTime(item.DueDate), CreatedAt: pgTime(&item.CreatedAt), UpdatedAt: pgTime(&item.UpdatedAt),
+		}); err != nil {
+			return err
+		}
+		return insertTodoEvent(ctx, queries, "todo.created", todoEventPayload(item))
+	})
 }
 
 func (repository *TodoRepository) List(ctx context.Context) ([]*entity.Todo, error) {
-	rows, err := repository.pool.Query(ctx, `
-SELECT id, title, completed, version, due_date, created_at, updated_at
-FROM todos
-ORDER BY created_at, id`)
+	rows, err := db.New(repository.pool).ListTodos(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	todos := make([]*entity.Todo, 0)
-	for rows.Next() {
-		item, err := scanTodo(rows)
-		if err != nil {
-			return nil, err
-		}
-		todos = append(todos, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+	todos := make([]*entity.Todo, 0, len(rows))
+	for _, row := range rows {
+		todos = append(todos, reconstructTodo(row))
 	}
 	return todos, nil
 }
 
 func (repository *TodoRepository) FindByID(ctx context.Context, id uuid.UUID) (*entity.Todo, error) {
-	item, err := scanTodo(repository.pool.QueryRow(ctx, `
-SELECT id, title, completed, version, due_date, created_at, updated_at
-FROM todos
-WHERE id = $1`, id))
+	row, err := db.New(repository.pool).FindTodoByID(ctx, pgUUID(id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, todo.ErrNotFound
 	}
-	return item, err
+	return reconstructTodo(row), err
 }
 
 func (repository *TodoRepository) Update(ctx context.Context, item *entity.Todo, expectedVersion int32) error {
-	result, err := repository.pool.Exec(ctx, `
-UPDATE todos
-SET title = $1, completed = $2, version = $3, due_date = $4, updated_at = $5
-WHERE id = $6 AND version = $7`,
-		item.Title.String(),
-		item.Completed,
-		item.Version,
-		item.DueDate,
-		item.UpdatedAt,
-		item.ID,
-		expectedVersion,
-	)
-	if err != nil {
-		return err
-	}
-	if result.RowsAffected() == 0 {
-		return todo.ErrVersionConflict
-	}
-	return nil
+	return repository.withTransaction(ctx, func(tx pgx.Tx) error {
+		queries := db.New(tx)
+		rows, err := queries.UpdateTodo(ctx, db.UpdateTodoParams{
+			Title: item.Title.String(), Completed: item.Completed, Version: item.Version,
+			DueDate: pgTime(item.DueDate), UpdatedAt: pgTime(&item.UpdatedAt), ID: pgUUID(item.ID), Version_2: expectedVersion,
+		})
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return todo.ErrVersionConflict
+		}
+		return insertTodoEvent(ctx, queries, "todo.updated", todoEventPayload(item))
+	})
 }
 
 func (repository *TodoRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	result, err := repository.pool.Exec(ctx, `DELETE FROM todos WHERE id = $1`, id)
+	return repository.withTransaction(ctx, func(tx pgx.Tx) error {
+		queries := db.New(tx)
+		rows, err := queries.DeleteTodo(ctx, pgUUID(id))
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return todo.ErrNotFound
+		}
+		return insertTodoEvent(ctx, queries, "todo.deleted", struct {
+			ID uuid.UUID `json:"id"`
+		}{ID: id})
+	})
+}
+
+func (repository *TodoRepository) withTransaction(ctx context.Context, operation func(pgx.Tx) error) error {
+	tx, err := repository.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if result.RowsAffected() == 0 {
-		return todo.ErrNotFound
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := operation(tx); err != nil {
+		return err
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
-type rowScanner interface {
-	Scan(...any) error
+func insertTodoEvent(ctx context.Context, queries *db.Queries, eventType string, payload any) error {
+	encodedPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal %s outbox payload: %w", eventType, err)
+	}
+	return queries.InsertOutboxEvent(ctx, db.InsertOutboxEventParams{ID: pgUUID(uuid.New()), EventType: eventType, Payload: encodedPayload})
 }
 
-func scanTodo(row rowScanner) (*entity.Todo, error) {
-	var (
-		id        uuid.UUID
-		title     string
-		completed bool
-		version   int32
-		dueDate   *time.Time
-		createdAt time.Time
-		updatedAt time.Time
-	)
-	if err := row.Scan(&id, &title, &completed, &version, &dueDate, &createdAt, &updatedAt); err != nil {
-		return nil, err
+type todoPayload struct {
+	ID        uuid.UUID  `json:"id"`
+	Title     string     `json:"title"`
+	Completed bool       `json:"completed"`
+	Version   int32      `json:"version"`
+	DueDate   *time.Time `json:"dueDate,omitempty"`
+}
+
+func todoEventPayload(item *entity.Todo) todoPayload {
+	return todoPayload{ID: item.ID, Title: item.Title.String(), Completed: item.Completed, Version: item.Version, DueDate: item.DueDate}
+}
+
+func pgUUID(id uuid.UUID) pgtype.UUID { return pgtype.UUID{Bytes: id, Valid: true} }
+
+func pgTime(value *time.Time) pgtype.Timestamptz {
+	if value == nil {
+		return pgtype.Timestamptz{}
 	}
-	return entity.ReconstructTodo(id, title, completed, version, dueDate, createdAt, updatedAt), nil
+	return pgtype.Timestamptz{Time: *value, Valid: true}
+}
+
+func reconstructTodo(row db.Todo) *entity.Todo {
+	var dueDate *time.Time
+	if row.DueDate.Valid {
+		dueDate = &row.DueDate.Time
+	}
+	return entity.ReconstructTodo(uuid.UUID(row.ID.Bytes), row.Title, row.Completed, row.Version, dueDate, row.CreatedAt.Time, row.UpdatedAt.Time)
 }

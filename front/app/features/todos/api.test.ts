@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { todoAPI } from "./api";
+import { APIProblemError, todoAPI } from "./api";
 
 describe("todoAPI", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -31,9 +31,28 @@ describe("todoAPI", () => {
     );
   });
 
-  it("throws for an unsuccessful response", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 409 }));
+  it("preserves Problem Details for an unsuccessful response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          type: "https://reference-todo.dev/problems/version-conflict",
+          title: "Todo was modified",
+          status: 409,
+          detail: "Reload before updating.",
+        }),
+        { status: 409, headers: { "Content-Type": "application/problem+json" } },
+      ),
+    );
 
-    await expect(todoAPI.listTodos()).rejects.toThrow("409");
+    const error = await todoAPI.listTodos().catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(APIProblemError);
+    expect(error).toMatchObject({ status: 409, problem: { title: "Todo was modified" } });
+  });
+
+  it("falls back to a status-only error for a non-Problem response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 503 }));
+
+    await expect(todoAPI.listTodos()).rejects.toThrow("503");
   });
 });

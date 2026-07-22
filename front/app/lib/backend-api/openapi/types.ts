@@ -175,6 +175,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description The server could not understand the request due to invalid syntax. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["BadRequestProblem"];
+                };
+            };
             /** @description The server cannot find the requested resource. */
             404: {
                 headers: {

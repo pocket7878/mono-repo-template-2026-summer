@@ -174,6 +174,20 @@ func TestTodosUpdateRejectsInvalidID(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, response.Code)
 }
 
+func TestTodosUpdateRejectsMissingVersion(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api.RegisterHandlers(router, handler.NewTodoHandler(stubUseCase{}))
+	request := httptest.NewRequest(http.MethodPatch, "/todos/41bb7dd8-20f5-4bd7-93af-2b7163bb7a35", strings.NewReader(`{"completed":true}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Contains(t, response.Body.String(), "invalid-version")
+}
+
 func TestTodosUpdateMapsNotFoundToProblem(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

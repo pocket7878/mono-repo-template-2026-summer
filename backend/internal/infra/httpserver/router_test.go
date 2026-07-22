@@ -25,6 +25,7 @@ func TestNewRouterServesHealth(t *testing.T) {
 
 func TestNewRouterAnswersCORSPreflight(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	t.Setenv("FRONTEND_ORIGIN", "http://127.0.0.1:26042")
 	router := httpserver.NewRouter(handler.NewTodoHandler(nil))
 	request := httptest.NewRequest(http.MethodOptions, "/todos", nil)
 	response := httptest.NewRecorder()
@@ -32,5 +33,5 @@ func TestNewRouterAnswersCORSPreflight(t *testing.T) {
 	router.ServeHTTP(response, request)
 
 	require.Equal(t, http.StatusNoContent, response.Code)
-	require.Equal(t, "http://127.0.0.1:5173", response.Header().Get("Access-Control-Allow-Origin"))
+	require.Equal(t, "http://127.0.0.1:26042", response.Header().Get("Access-Control-Allow-Origin"))
 }

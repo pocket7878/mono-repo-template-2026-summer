@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import type { Todo, TodoAPI } from "./api";
-import { todoAPI } from "./api";
+import { APIProblemError, todoAPI } from "./api";
 
 type TodoPageProps = {
   api?: TodoAPI;
@@ -41,8 +41,12 @@ export function TodoPage({ api = todoAPI }: TodoPageProps) {
       const updated = await api.updateTodo(todo, !todo.completed);
       setTodos((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setMessage(null);
-    } catch {
-      setMessage("This todo changed elsewhere. Reload to get the latest version.");
+    } catch (error) {
+      setMessage(
+        error instanceof APIProblemError && error.status === 409
+          ? "This todo changed elsewhere. Reload to get the latest version."
+          : "Could not update todo.",
+      );
     }
   }
 
