@@ -9,7 +9,6 @@ let
     configureFlags = builtins.filter (flag:
       !(builtins.any (name: prev.lib.hasPrefix ("--shared-" + name) flag)
         [ "brotli" "cares" "openssl" "sqlite" ])
-      && flag != "--openssl-use-def-ca-store"
     ) old.configureFlags;
     src = prev.fetchurl {
       url = "https://nodejs.org/dist/v22.23.4/node-v22.23.4.tar.xz";
