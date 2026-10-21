@@ -12,6 +12,7 @@
         let
           pkgs = import nixpkgs {
             inherit system;
+            overlays = [ (import ./node-security-overlay.nix) ];
             config.allowUnfreePredicate = pkg: builtins.elem (nixpkgs.lib.getName pkg) [
               "terraform"
             ];
@@ -20,7 +21,7 @@
           default = pkgs.mkShell {
             packages = with pkgs; [
               go
-              nodejs_20
+              nodejs_22
               terraform
               tflint
               gnumake
